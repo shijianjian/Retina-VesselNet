@@ -5,6 +5,8 @@ Created by Resnick Xing on 2018/5/11
 """
 import glob
 import cv2
+import os
+from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.python.keras.models import model_from_json
@@ -23,12 +25,16 @@ class SegmentionInfer(InferBase):
         self.model.load_weights(self.config.hdf5_path + self.config.exp_name + '_best_weights.h5')
 
     def analyze_name(self, path):
-        return (path.split('\\')[-1]).split(".")[0]
+        return (path.split(os.path.sep)[-1]).split(".")[0]
 
     def predict(self):
-        predList = glob.glob(self.config.test_img_path + " * ." + self.config.test_datatype)
+        predList = glob.glob(self.config.test_img_path + "*." + self.config.test_datatype)
+        print(predList)
         for path in predList:
             orgImg_temp = plt.imread(path)
+            # img = Image.open(path)
+            # img = img.resize((370, 250))
+            # orgImg_temp = np.asarray(img)
             orgImg = orgImg_temp[:, :, 1] * 0.75 + orgImg_temp[:, :, 0] * 0.25
             print("[Info] Analyze filename...", self.analyze_name(path))
             height, width = orgImg.shape[:2]

@@ -6,7 +6,8 @@ Created by Resnick Xing on 2018/5/11
 import os
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers.merge import add, multiply
-from tensorflow.python.keras.layers import Lambda, Input, Conv2D, Conv2DTranspose, Conv2DTranspose, MaxPooling2D, UpSampling2D, Cropping2D, core, Dropout, normalization, concatenate, Activation
+from tensorflow.python.keras.layers import Lambda, Input, Conv2D, Conv2DTranspose, Conv2DTranspose, MaxPooling2D, UpSampling2D, Cropping2D, core, Dropout, normalization, concatenate, Activation, GlobalAveragePooling2D, Dense, Reshape, Multiply
+from tensorflow.python.keras import regularizers
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.layers.core import Layer, InputSpec
 from tensorflow.python.keras.layers.advanced_activations import LeakyReLU
@@ -29,19 +30,34 @@ class SegmentionModel(ModelBase):
         inputshape = K.int_shape(inputs)
         bn = normalization.BatchNormalization(epsilon=2e-05, axis=3, momentum=0.9, weights=None, beta_initializer='zero', gamma_initializer='one')(inputs)
         act = Activation('relu')(bn)
-        conv1 = Conv2D(outdim, (3, 3), activation=None, padding='same')(act)
+        act = Dropout(rate=0.2)(act)
+        conv1 = Conv2D(outdim, (3, 3), activation=None, padding='same', kernel_regularizer=regularizers.l2(0.0001))(act)
         if inputshape[3] != outdim:
-            shortcut = Conv2D(outdim, (1, 1), padding='same')(inputs)
+            shortcut = Conv2D(outdim, (1, 1), padding='same', kernel_regularizer=regularizers.l2(0.0001))(inputs)
         else:
             shortcut = inputs
         result1 = add([conv1, shortcut])
 
         bn = normalization.BatchNormalization(epsilon=2e-05, axis=3, momentum=0.9, weights=None, beta_initializer='zero', gamma_initializer='one')(result1)
         act = Activation('relu')(bn)
-        conv2 = Conv2D(outdim, (3, 3), activation=None, padding='same')(act)
+        act = Dropout(rate=0.2)(act)
+        conv2 = Conv2D(outdim, (3, 3), activation=None, padding='same', kernel_regularizer=regularizers.l2(0.0001))(act)
         result = add([result1, conv2, shortcut])
         result = Activation('relu')(result)
         return result
+
+    def se_block(self, ratio):
+        def f(inputs):
+            squeeze = GlobalAveragePooling2D()(inputs)
+            out_dim = squeeze.get_shape().as_list()[-1]
+            excitation = Dense(units=out_dim / ratio)(squeeze)
+            excitation = Activation("relu")(excitation)
+            excitation = Dense(units=out_dim)(excitation)
+            excitation = Activation("sigmoid")(excitation)
+            excitation = Reshape([1, 1, out_dim])(excitation)
+            scale = Multiply()([inputs, excitation])
+            return scale
+        return f
 
     def build_model(self):
         inputs = Input((self.patch_height, self.patch_width, 1))
@@ -50,32 +66,39 @@ class SegmentionModel(ModelBase):
         conv1 = Activation('relu')(conv1)
 
         conv1 = self.DenseBlock(conv1, 32)  # 48
+        conv1 = self.se_block(ratio=2)(conv1)
         pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
 
         conv2 = self.DenseBlock(pool1, 64)  # 24
+        conv2 = self.se_block(ratio=2)(conv2)
         pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
 
         conv3 = self.DenseBlock(pool2, 64)  # 12
+        conv3 = self.se_block(ratio=2)(conv3)
         pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
 
         conv4 = self.DenseBlock(pool3, 64)  # 12
+        conv4 = self.se_block(ratio=2)(conv4)
 
-        up1 = Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(conv4)
+        up1 = Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.0001))(conv4)
         up1 = concatenate([up1, conv3], axis=3)
 
         conv5 = self.DenseBlock(up1, 64)
+        conv5 = self.se_block(ratio=2)(conv5)
 
-        up2 = Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(conv5)
+        up2 = Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.0001))(conv5)
         up2 = concatenate([up2, conv2], axis=3)
 
         conv6 = self.DenseBlock(up2, 64)
+        conv6 = self.se_block(ratio=2)(conv6)
 
-        up3 = Conv2DTranspose(32, (3, 3), strides=2, activation='relu', padding='same')(conv6)
+        up3 = Conv2DTranspose(32, (3, 3), strides=2, activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.0001))(conv6)
         up3 = concatenate([up3, conv1], axis=3)
 
         conv7 = self.DenseBlock(up3, 32)
+        conv7 = self.se_block(ratio=2)(conv7)
 
-        conv8 = Conv2D(self.num_seg_class + 1, (1, 1), activation='relu', padding='same')(conv7)
+        conv8 = Conv2D(self.num_seg_class + 1, (1, 1), activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.0001))(conv7)
         # conv6 = normalization.BatchNormalization(epsilon=1e-06, mode=1, axis=-1, momentum=0.9, weights=None, beta_init='zero', gamma_init='one')(conv6)
 
         # for tensorflow

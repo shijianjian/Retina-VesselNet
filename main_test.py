@@ -27,7 +27,7 @@ def main_test():
         infer.predict()
 
     print('[INFO] Metric results...')
-    gtlist = fileList(config.test_gt_path, '*' + config.test_gt_datatype)
+    gtlist = fileList(config.test_gt_path, '*.' + config.test_gt_datatype)
     problist = fileList(config.test_result_path, '*.bmp')
     modelName = ['DenseNet-Unet']
     drawCurve(gtlist, [problist], modelName, 'DRIVE', config.checkpoint)
@@ -36,4 +36,11 @@ def main_test():
 
 
 if __name__ == '__main__':
+    import os
+    import tensorflow as tf
+    import tensorflow.keras.backend as K
+    os.environ["CUDA_VISIBLE_DEVICES"] = '2'
+    os.environ["CUDA_DEVICE_ORDER"] = 'PCI_BUS_ID'
+    os.environ['KERAS_BACKEND'] = 'tensorflow'
+
     main_test()
