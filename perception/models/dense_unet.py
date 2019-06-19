@@ -30,7 +30,7 @@ class SegmentionModel(ModelBase):
         inputshape = K.int_shape(inputs)
         bn = normalization.BatchNormalization(epsilon=2e-05, axis=3, momentum=0.9, weights=None, beta_initializer='zero', gamma_initializer='one')(inputs)
         act = Activation('relu')(bn)
-        act = Dropout(rate=0.2)(act)
+        # act = Dropout(rate=0.2)(act)
         conv1 = Conv2D(outdim, (3, 3), activation=None, padding='same', kernel_regularizer=regularizers.l2(0.0001))(act)
         if inputshape[3] != outdim:
             shortcut = Conv2D(outdim, (1, 1), padding='same', kernel_regularizer=regularizers.l2(0.0001))(inputs)
@@ -40,7 +40,7 @@ class SegmentionModel(ModelBase):
 
         bn = normalization.BatchNormalization(epsilon=2e-05, axis=3, momentum=0.9, weights=None, beta_initializer='zero', gamma_initializer='one')(result1)
         act = Activation('relu')(bn)
-        act = Dropout(rate=0.2)(act)
+        # act = Dropout(rate=0.2)(act)
         conv2 = Conv2D(outdim, (3, 3), activation=None, padding='same', kernel_regularizer=regularizers.l2(0.0001))(act)
         result = add([result1, conv2, shortcut])
         result = Activation('relu')(result)
